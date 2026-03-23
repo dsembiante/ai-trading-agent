@@ -198,3 +198,45 @@ class DataCollector:
             macro_context=macro_context,
             data_sources_used=status,
         )
+
+    def get_market_regime(self) -> str:
+        """
+        Determine the current broad market regime using SPY price vs. moving averages.
+
+        Uses the classic golden cross / death cross framework:
+            Bull:     Price > SMA-50 > SMA-200 — uptrend confirmed on both timeframes
+            Bear:     Price < SMA-50 < SMA-200 — downtrend confirmed on both timeframes
+            Sideways: Neither condition met — mixed or transitioning market
+
+        Called once per cycle in crew.py before the per-ticker loop so all agents
+        operate with the same regime context. Defaults to 'sideways' on failure
+        to err on the side of caution rather than assuming a bull market.
+
+        Returns:
+            'bull', 'bear', or 'sideways'
+        """
+        try:
+            bars = self.alpaca.get_stock_bars(StockBarsRequest(
+                symbol_or_symbols='SPY',
+                timeframe=TimeFrame.Day,
+                start=datetime.now() - timedelta(days=300),
+            ))
+            df = bars.df.reset_index()
+            df['SMA_50']  = df['close'].rolling(50).mean()
+            df['SMA_200'] = df['close'].rolling(200).mean()
+
+            current_price = float(df['close'].iloc[-1])
+            sma_50        = float(df['SMA_50'].iloc[-1])
+            sma_200       = float(df['SMA_200'].iloc[-1])
+
+            # Golden cross = bull market; death cross = bear market
+            if current_price > sma_50 and sma_50 > sma_200:
+                return 'bull'
+            elif current_price < sma_50 and sma_50 < sma_200:
+                return 'bear'
+            else:
+                return 'sideways'
+
+        except Exception as e:
+            log_error('market_regime', 'SPY', str(e))
+            return 'sideways'  # Cautious default if detection fails

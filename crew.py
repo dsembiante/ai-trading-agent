@@ -95,6 +95,22 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
     open_positions = executor.get_open_positions()
     trades_executed = 0
 
+    # ── Market Regime Detection ───────────────────────────────────────────────
+    # Detected once per cycle using SPY golden/death cross — shared across all
+    # tickers so agents operate with consistent macro context. Position sizing
+    # is scaled down in bear/sideways markets to reduce risk exposure.
+    market_regime = collector.get_market_regime()
+    print(f'📈 Market regime: {market_regime.upper()}')
+
+    if market_regime == 'bear':
+        print('🐻 Bear market detected — reducing position sizes and favoring shorts')
+        config.max_position_pct = 0.01   # Half normal size in bear market
+    elif market_regime == 'sideways':
+        print('➡️  Sideways market — being selective')
+        config.max_position_pct = 0.015  # Slightly reduced
+    else:
+        config.max_position_pct = 0.02   # Full size in confirmed bull market
+
     # ── Agent Instantiation ───────────────────────────────────────────────────
     # Agents are created once per cycle (not per ticker) and reused.
     # Each agent holds the same shared LLM client from agents.py, so creating
@@ -131,6 +147,7 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
                 MACD: {market_data.macd:.4f if market_data.macd else 'N/A'}
                 50-day MA: {market_data.moving_avg_50:.2f if market_data.moving_avg_50 else 'N/A'}
                 200-day MA: {market_data.moving_avg_200:.2f if market_data.moving_avg_200 else 'N/A'}
+                Market Regime: {market_regime.upper()}
                 News headlines: {market_data.news_headlines[:5]}
                 Macro context: {market_data.macro_context or 'N/A'}
                 Data sources available: {market_data.data_sources_used.model_dump()}
