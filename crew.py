@@ -48,6 +48,7 @@ collector = DataCollector()
 sizer     = PositionSizer()
 executor  = TradeExecutor()
 db        = Database()
+cb        = CircuitBreaker()  # Used by run_single_ticker for news-triggered trades
 
 
 # ── Main Cycle ────────────────────────────────────────────────────────────────
@@ -261,3 +262,150 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
         f'\n✅ Cycle complete — {trades_executed} trades executed '
         f'in {run_log.duration_seconds:.1f}s'
     )
+
+
+# ── News-Triggered Single-Ticker Analysis ─────────────────────────────────────
+
+def run_single_ticker(ticker: str, headline: str, position_multiplier: float = 1.0):
+    """
+    Run a full 4-agent crew analysis on a single ticker triggered by breaking news.
+
+    Called by the news monitor background thread in scheduler.py when a high-impact
+    headline mentioning a known ticker is detected. Mirrors the per-ticker logic
+    in run_trading_cycle() but is optimised for speed — no watchlist loop, no
+    run log, and the headline is injected directly into the agent summary so the
+    crew weights it heavily.
+
+    Position multiplier:
+        1.0 — ticker is in config.watchlist (full position size)
+        0.5 — ticker is S&P 500 universe only (half size — less analytical context)
+
+    Args:
+        ticker:              Symbol to analyse.
+        headline:            Breaking news headline that triggered this call.
+        position_multiplier: Scaling factor applied to the calculated position size.
+    """
+    try:
+        print(f'\n🚨 News-triggered analysis: {ticker}')
+        print(f'   Headline: {headline[:80]}')
+
+        # Collect market data — skip if Alpaca is unreachable (no price = can't size)
+        market_data = collector.collect(ticker)
+        if not market_data.data_sources_used.alpaca:
+            print(f'⚠️  No price data for {ticker} — skipping')
+            return
+
+        # Circuit breaker check before placing any news-triggered order
+        portfolio_value = executor.get_portfolio_value()
+        if not cb.check(portfolio_value):
+            print('🚨 Circuit breaker active — skipping news trade')
+            return
+
+        # Label shown to agents so they understand the reduced position context
+        position_label = 'FULL' if position_multiplier == 1.0 else 'HALF (non-watchlist)'
+
+        # Headline is surfaced prominently at the top of the summary and again
+        # at the bottom with an explicit instruction to weight it heavily
+        summary = f'''
+            Ticker: {ticker}
+            BREAKING NEWS TRIGGER: {headline}
+            Price: ${market_data.current_price:.2f}
+            Volume: {market_data.volume:,}
+            RSI: {market_data.rsi if market_data.rsi else 'N/A'}
+            MACD: {market_data.macd if market_data.macd else 'N/A'}
+            News Headlines: {market_data.news_headlines[:3]}
+            Macro Context: {market_data.macro_context or 'N/A'}
+            Position Size: {position_label}
+            Data Sources: {market_data.data_sources_used.model_dump()}
+            This analysis was triggered by breaking news.
+            Weight the news headline heavily in your decision.
+        '''
+
+        # Fresh agents per call — news triggers are infrequent enough that
+        # the instantiation overhead is negligible
+        bull_agent      = create_bull_agent()
+        bear_agent      = create_bear_agent()
+        risk_agent      = create_risk_manager()
+        portfolio_agent = create_portfolio_manager()
+
+        bull_task      = create_bull_task(bull_agent, ticker, summary)
+        bear_task      = create_bear_task(bear_agent, ticker, summary)
+        risk_task      = create_risk_manager_task(risk_agent, ticker, bull_task, bear_task)
+
+        open_positions = executor.get_open_positions()
+        portfolio_task = create_portfolio_task(portfolio_agent, ticker, risk_task, open_positions)
+
+        crew = Crew(
+            agents=[bull_agent, bear_agent, risk_agent, portfolio_agent],
+            tasks=[bull_task, bear_task, risk_task, portfolio_task],
+            process=Process.sequential,
+            verbose=False,
+        )
+        result = crew.kickoff()
+
+        # Parse decision — same dual-path fallback as run_trading_cycle()
+        if hasattr(result, 'json_dict') and result.json_dict:
+            decision = TradeDecision(**result.json_dict)
+        else:
+            raw = result.raw if hasattr(result, 'raw') else str(result)
+            decision = TradeDecision(**json.loads(raw))
+
+        # ── Position Sizing & Execution ───────────────────────────────────────
+        if decision.execute and decision.trade_type:
+            hold = HoldPeriod(decision.hold_period) if decision.hold_period else HoldPeriod.SWING
+            sizing = sizer.calculate(
+                portfolio_value, market_data.current_price, decision.confidence, hold
+            )
+
+            # Scale down position for non-watchlist universe stocks
+            sizing['position_usd'] = sizing['position_usd'] * position_multiplier
+            sizing['shares']       = round(sizing['position_usd'] / market_data.current_price, 2)
+
+            decision.position_size_usd  = sizing['position_usd']
+            decision.stop_loss_price    = sizer.get_stop_loss(
+                market_data.current_price, decision.trade_type, hold)
+            decision.take_profit_price  = sizer.get_take_profit(
+                market_data.current_price, decision.trade_type, hold)
+            decision.max_hold_days      = sizer.get_max_hold_days(hold)
+
+            order_result = executor.execute_trade(decision)
+
+            if order_result.get('status') == 'placed':
+                import uuid
+                trade_record = {
+                    'trade_id':               str(uuid.uuid4()),
+                    'ticker':                 ticker,
+                    'trade_type':             decision.trade_type,
+                    'order_type':             decision.order_type,
+                    'hold_period':            decision.hold_period,
+                    'max_hold_days':          decision.max_hold_days,
+                    'entry_price':            market_data.current_price,
+                    'exit_price':             None,
+                    'shares':                 sizing['shares'],
+                    'position_size_usd':      sizing['position_usd'],
+                    'stop_loss_price':        decision.stop_loss_price,
+                    'take_profit_price':      decision.take_profit_price,
+                    'pnl':                    None,
+                    'pnl_pct':                None,
+                    'status':                 'open',
+                    # exit_reason stores the triggering headline for audit trail
+                    'exit_reason':            f'news_triggered: {headline[:50]}',
+                    'confidence_at_entry':    decision.confidence,
+                    'bull_reasoning':         decision.bull_reasoning,
+                    'bear_reasoning':         decision.bear_reasoning,
+                    'risk_manager_reasoning': decision.risk_manager_reasoning,
+                    'hold_period_reasoning':  decision.hold_period_reasoning,
+                    'data_sources_available': str(market_data.data_sources_used.model_dump()),
+                    'entry_time':             datetime.now().isoformat(),
+                    'exit_time':              None,
+                }
+                db.insert_trade(trade_record)
+                log_trade(trade_record)
+                print(f'✅ News trade placed: {ticker} ${sizing["position_usd"]:.2f}')
+
+        else:
+            print(f'⏭️  {ticker} news analyzed — no trade (confidence: {decision.confidence:.2f})')
+
+    except Exception as e:
+        log_error('run_single_ticker', ticker, str(e))
+        print(f'❌ Error in news-triggered analysis for {ticker}: {e}')
