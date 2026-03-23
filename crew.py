@@ -131,8 +131,7 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
                 MACD: {market_data.macd:.4f if market_data.macd else 'N/A'}
                 50-day MA: {market_data.moving_avg_50:.2f if market_data.moving_avg_50 else 'N/A'}
                 200-day MA: {market_data.moving_avg_200:.2f if market_data.moving_avg_200 else 'N/A'}
-                News sentiment: {market_data.news_sentiment if market_data.news_sentiment else 'N/A'}
-                Recent headlines: {market_data.news_headlines[:3]}
+                News headlines: {market_data.news_headlines[:5]}
                 Macro context: {market_data.macro_context or 'N/A'}
                 Data sources available: {market_data.data_sources_used.model_dump()}
             '''

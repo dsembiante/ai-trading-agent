@@ -76,7 +76,7 @@ class DataCollector:
             bars = self.alpaca.get_stock_bars(StockBarsRequest(
                 symbol_or_symbols=ticker,
                 timeframe=TimeFrame.Day,
-                start=datetime.now() - timedelta(days=250)
+                start=datetime.now() - timedelta(days=300)
             ))
             df = bars.df.reset_index()
 
@@ -102,8 +102,11 @@ class DataCollector:
             log_error('alpaca', ticker, str(e))
 
         # ── 2. Finnhub — News Headlines & Sentiment ───────────────────────────
-        # Fetch the last 3 days of company news. Limit to 5 headlines to keep
-        # the LLM prompt concise; the sentiment score is a normalised compound.
+        # Split into two separate try blocks so a 403 on news_sentiment
+        # (paid-tier endpoint) does not abort the headlines fetch (free tier).
+        # Headlines are available on the Finnhub free plan; sentiment is not.
+
+        # 2a. Headlines — free tier, should succeed with any valid API key
         try:
             news = self.finnhub.company_news(
                 ticker,
@@ -112,13 +115,19 @@ class DataCollector:
             )
             if news:
                 headlines = [n['headline'] for n in news[:5]]
-                sd = self.finnhub.news_sentiment(ticker)
-                # companyNewsScore: -1.0 (very bearish) to 1.0 (very bullish)
-                news_sentiment = sd.get('companyNewsScore', None)
-
         except Exception as e:
             status.finnhub = False
-            log_error('finnhub', ticker, str(e))
+            log_error('finnhub_news', ticker, str(e))
+
+        # 2b. Sentiment score — requires Finnhub paid plan; degrades gracefully
+        # to None if unavailable. news_sentiment stays None on free tier.
+        try:
+            sd = self.finnhub.news_sentiment(ticker)
+            # companyNewsScore: -1.0 (very bearish) to 1.0 (very bullish)
+            news_sentiment = sd.get('companyNewsScore', None)
+        except Exception as e:
+            # 403 on free tier is expected — log at debug level only
+            log_error('finnhub_sentiment', ticker, str(e))
 
         # ── 3. Alpha Vantage — Company Fundamentals ───────────────────────────
         # Alpha Vantage free tier is capped at 25 requests/day across all tickers.
@@ -158,7 +167,7 @@ class DataCollector:
             else:
                 fed_rate = self.fred.get_series('FEDFUNDS').iloc[-1]
                 # Year-over-year % change in CPI as a proxy for trailing inflation
-                inflation = self.fred.get_series('CPIAUCSL').pct_change(12).iloc[-1] * 100
+                inflation = self.fred.get_series('CPIAUCSL').pct_change(12, fill_method=None).iloc[-1] * 100
                 macro = {'fed_rate': float(fed_rate), 'inflation': float(inflation)}
                 with open(macro_cache, 'w') as f:
                     json.dump(macro, f)

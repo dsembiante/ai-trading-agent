@@ -1,6 +1,7 @@
 crewai
 crewai-tools
 groq
+langchain-groq
 pydantic
 streamlit
 alpaca-py
