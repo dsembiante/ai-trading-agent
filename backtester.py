@@ -130,15 +130,16 @@ class Backtester:
 
             if position is None:
                 # ── Entry Logic ───────────────────────────────────────────────
-                # RSI oversold + price above 50-day MA confirms we're not in freefall
-                if rsi < 30:
-                    if not pd.isna(row.get('SMA_50')) and price > row['SMA_50']:
-                        position = {
-                            'entry_price': price,
-                            'entry_date':  date,
-                            'stop_loss':   price * 0.95,   # -5% hard stop
-                            'take_profit': price * 1.10,   # +10% target (2:1 R/R)
-                        }
+                # RSI threshold loosened from 30 to 45 to generate more trades
+                # across the backtest period. SMA-50 filter removed so entries
+                # are not blocked during sideways or mild downtrend conditions.
+                if rsi < 45:
+                    position = {
+                        'entry_price': price,
+                        'entry_date':  date,
+                        'stop_loss':   price * 0.95,   # -5% hard stop
+                        'take_profit': price * 1.10,   # +10% target (2:1 R/R)
+                    }
 
             else:
                 # ── Exit Logic ────────────────────────────────────────────────
@@ -156,8 +157,9 @@ class Backtester:
                     exit_price  = position['take_profit']
                     exit_reason = 'take_profit'
 
-                elif rsi > 70:
-                    # RSI overbought — exit at close regardless of P&L
+                elif rsi > 60:
+                    # RSI exit threshold loosened from 70 to 60 to take profits
+                    # earlier and reduce the chance of a reversal erasing gains
                     exit_price  = price
                     exit_reason = 'rsi_overbought'
 
@@ -237,26 +239,40 @@ class Backtester:
 
     # ── Runner ────────────────────────────────────────────────────────────────
 
-    def run(self, days: int = 180):
+    def run(self, days: int = 365):
         """
         Execute the full backtest across every ticker in config.watchlist.
 
-        Per-ticker results are printed inline for progress visibility.
-        Overall aggregated metrics are printed at the end with a pass/fail
-        recommendation based on minimum acceptance thresholds.
+        Enhanced version with per-stock breakdown, ranked results table,
+        and watchlist keep/cut recommendations. Default extended to 365 days
+        to capture a full market cycle including trend and mean-reversion periods.
 
-        Acceptance criteria:
-            Win rate  ≥ 50% — strategy wins more than it loses
-            Sharpe    ≥ 0.5 — sufficient risk-adjusted return to justify live use
+        Output sections:
+            1. Per-ticker inline results with pass/fail verdict
+            2. Ranked table sorted by total return (best to worst)
+            3. Aggregated overall metrics across all tickers
+            4. Watchlist recommendations — which tickers to keep or cut
+            5. Overall go/no-go recommendation for paper trading
+
+        Acceptance criteria per ticker:
+            Win rate  ≥ 50% AND total return > 0% → KEEP
+            Otherwise → CUT (consider removing from watchlist)
+
+        Acceptance criteria overall:
+            Win rate  ≥ 50% AND Sharpe ≥ 0.5 → proceed to paper trading
 
         Args:
             days: Number of calendar days of historical data to test against.
+                  365 days captures a full market cycle for more reliable signals.
         """
-        print(f'\n📊 Running backtest over last {days} days...')
+        print(f'\n📊 Running enhanced backtest over last {days} days...')
         print(f'Tickers: {config.watchlist}\n')
+        print('=' * 70)
 
-        all_trades = []
+        all_trades  = []
+        stock_results = []
 
+        # ── Per-Ticker Loop ───────────────────────────────────────────────────
         for ticker in config.watchlist:
             print(f'Testing {ticker}...')
             df = self.get_historical_data(ticker, days)
@@ -270,35 +286,90 @@ class Backtester:
 
             if trades:
                 metrics = self.calculate_metrics(trades)
+
+                # Store per-stock summary for the ranking table
+                stock_results.append({
+                    'ticker':           ticker,
+                    'trades':           metrics['total_trades'],
+                    'win_rate':         metrics['win_rate'],
+                    'total_return_pct': metrics['total_return_pct'],
+                    'sharpe':           metrics['sharpe_ratio'],
+                    'max_drawdown':     metrics['max_drawdown_pct'],
+                })
+
+                # Per-ticker pass/fail: must win more than it loses AND be profitable
+                verdict = '✅' if metrics['win_rate'] >= 0.50 and metrics['total_return_pct'] > 0 else '❌'
                 print(
-                    f'  Trades: {metrics["total_trades"]} | '
+                    f'  {verdict} Trades: {metrics["total_trades"]} | '
                     f'Win Rate: {metrics["win_rate"]:.1%} | '
-                    f'Return: {metrics["total_return_pct"]:.1f}%'
+                    f'Return: {metrics["total_return_pct"]:.1f}% | '
+                    f'Sharpe: {metrics["sharpe_ratio"]:.2f}'
                 )
-
-        # ── Overall Summary ───────────────────────────────────────────────────
-        print('\n' + '=' * 50)
-        print('OVERALL BACKTEST RESULTS')
-        print('=' * 50)
-
-        overall = self.calculate_metrics(all_trades)
-        for key, value in overall.items():
-            if isinstance(value, float):
-                print(f'{key}: {value:.2f}')
             else:
-                print(f'{key}: {value}')
+                print(f'  ⚠️  No trades generated for {ticker}')
 
-        # ── Pass / Fail Recommendation ────────────────────────────────────────
-        print('\n📋 RECOMMENDATION:')
-        if overall.get('win_rate', 0) >= 0.50 and overall.get('sharpe_ratio', 0) >= 0.5:
-            print('✅ Backtest results acceptable — proceed to paper trading')
+        # ── Per-Stock Ranking Table ───────────────────────────────────────────
+        # Sort best to worst by total return so the strongest tickers are obvious
+        print('\n' + '=' * 70)
+        print('PER-STOCK RANKING (best to worst by total return)')
+        print('=' * 70)
+        stock_results.sort(key=lambda x: x['total_return_pct'], reverse=True)
+
+        print(f'{"Ticker":<8} {"Trades":<8} {"Win Rate":<12} {"Return %":<12} {"Sharpe":<10} {"Verdict"}')
+        print('-' * 70)
+
+        keepers = []
+        cuts    = []
+
+        for s in stock_results:
+            verdict = '✅ KEEP' if s['win_rate'] >= 0.50 and s['total_return_pct'] > 0 else '❌ CUT'
+            print(
+                f'{s["ticker"]:<8} {s["trades"]:<8} {s["win_rate"]:<12.1%} '
+                f'{s["total_return_pct"]:<12.1f} {s["sharpe"]:<10.2f} {verdict}'
+            )
+            if '✅' in verdict:
+                keepers.append(s['ticker'])
+            else:
+                cuts.append(s['ticker'])
+
+        # ── Overall Aggregated Metrics ────────────────────────────────────────
+        print('\n' + '=' * 70)
+        print('OVERALL RESULTS ACROSS ALL STOCKS')
+        print('=' * 70)
+        if all_trades:
+            overall = self.calculate_metrics(all_trades)
+            for key, value in overall.items():
+                if isinstance(value, float):
+                    print(f'{key}: {value:.2f}')
+                else:
+                    print(f'{key}: {value}')
+
+        # ── Watchlist Recommendations ─────────────────────────────────────────
+        # Actionable output: tells the operator exactly which tickers to remove
+        # before going live rather than just a pass/fail on the full watchlist
+        print('\n' + '=' * 70)
+        print('WATCHLIST RECOMMENDATIONS')
+        print('=' * 70)
+        if keepers:
+            print(f'✅ KEEP these stocks: {", ".join(keepers)}')
+        if cuts:
+            print(f'❌ CONSIDER CUTTING: {", ".join(cuts)}')
+
+        # ── Overall Go / No-Go ────────────────────────────────────────────────
+        print('\n📋 OVERALL RECOMMENDATION:')
+        if all_trades:
+            overall = self.calculate_metrics(all_trades)
+            if overall.get('win_rate', 0) >= 0.50 and overall.get('sharpe_ratio', 0) >= 0.5:
+                print('✅ Strategy shows promise — proceed to paper trading')
+            else:
+                print('⚠️  Mixed results — consider adjusting watchlist before paper trading')
         else:
-            print('⚠️  Backtest results below threshold — review strategy before paper trading')
-            print('   Win rate should be >= 50% and Sharpe ratio >= 0.5')
+            # No trades at all suggests RSI thresholds are too tight for this period
+            print('⚠️  No trades generated — loosen RSI thresholds')
 
 
 # ── Script Entrypoint ─────────────────────────────────────────────────────────
 # Run directly with: python backtester.py
 if __name__ == '__main__':
     backtester = Backtester()
-    backtester.run(days=180)
+    backtester.run(days=365)
