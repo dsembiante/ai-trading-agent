@@ -33,8 +33,6 @@ class CircuitBreaker:
     """
 
     def __init__(self):
-        from database import Database
-        self._db = Database()
         self._load_peak()
 
     # ── Persistence ───────────────────────────────────────────────────────────
@@ -44,15 +42,25 @@ class CircuitBreaker:
         Load the previously recorded peak portfolio value from PostgreSQL.
         On first run (or after a manual reset), peak_value is set to None
         so check() initialises it from the first observed portfolio value.
+        A fresh connection is opened each time to avoid idle timeout errors.
         """
-        self.peak_value = self._db.get_circuit_breaker_peak()
+        from database import Database
+        try:
+            self.peak_value = Database().get_circuit_breaker_peak()
+        except Exception:
+            self.peak_value = None
 
     def _save_peak(self):
         """
         Persist the updated high-water mark to PostgreSQL so it survives
         service restarts and Railway redeploys.
+        A fresh connection is opened each time to avoid idle timeout errors.
         """
-        self._db.set_circuit_breaker_peak(self.peak_value)
+        from database import Database
+        try:
+            Database().set_circuit_breaker_peak(self.peak_value)
+        except Exception as e:
+            print(f'CircuitBreaker: failed to save peak value: {e}')
 
     # ── Core Check ────────────────────────────────────────────────────────────
 
