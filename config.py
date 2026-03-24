@@ -123,12 +123,11 @@ class Config(BaseModel):
     # Symbols scanned on every agent cycle. Mix of mega-cap tech, financials,
     # and broad market ETFs for diversified signal generation.
     watchlist: list = [
-        'AMZN', 'TSLA', 'NVDA', 'JPM', 'MS',
-        'BAC', 'GS', 'AMD', 'SPY', 'QQQ',
-        'AAPL', 'V', 'IWM', 'GOOGL',
-        'UBER', 'PFE', 'WMT', 'XOM',          # Previous additions
-        'NEE', 'MCD', 'AWK', 'KO'             # Defensive bear market protection
-    ]
+        'AMZN', 'NVDA', 'JPM', 'MS', 'BAC',
+        'GS', 'SPY', 'QQQ', 'AAPL', 'V',
+        'IWM', 'GOOGL', 'UBER', 'PFE', 'WMT',
+        'XOM', 'NEE', 'MCD', 'AWK', 'KO'    # Defensive stocks
+]
     
     # watchlist: list = [
     #     'JNJ', 'PG', 'KO', 'MCD', 'NEE',

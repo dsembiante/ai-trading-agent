@@ -372,4 +372,4 @@ class Backtester:
 # Run directly with: python backtester.py
 if __name__ == '__main__':
     backtester = Backtester()
-    backtester.run(days=365)
+    backtester.run(days=730)
