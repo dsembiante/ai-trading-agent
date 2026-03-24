@@ -87,6 +87,13 @@ class Config(BaseModel):
     groq_max_retries: int = 3
     groq_retry_delay: float = 2.0  # Seconds between retry attempts
 
+    # ── PDT Rule Protection ───────────────────────────────────────────────────
+    # Pattern Day Trader rule requires $25,000 minimum balance to place more
+    # than 3 intraday round-trips in a 5-day rolling window. Keep False until
+    # the account is consistently above $25,000 to avoid PDT violations.
+    # Set True only when account balance is reliably above $25,000.
+    allow_intraday: bool = False
+
     # ── Risk Management ───────────────────────────────────────────────────────
     max_position_pct: float = 0.03      # Max 3% of portfolio per single position
     circuit_breaker_pct: float = 0.10   # Hard stop: halt all trading at 10% drawdown

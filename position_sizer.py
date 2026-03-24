@@ -139,6 +139,29 @@ class PositionSizer:
             return round(entry * (1 + pct), 2)  # Target above entry for longs
         return round(entry * (1 - pct), 2)       # Target below entry for shorts
 
+    def get_hold_period_safe(self, requested_hold: HoldPeriod) -> HoldPeriod:
+        """
+        Return a PDT-safe hold period, upgrading intraday to swing when necessary.
+
+        The Pattern Day Trader rule restricts accounts under $25,000 to no more
+        than 3 intraday round-trips in a rolling 5-day window. When
+        config.allow_intraday is False, any intraday decision from the crew is
+        automatically upgraded to swing so the account never risks a PDT violation.
+
+        This is the single enforcement point — both run_trading_cycle() and
+        run_single_ticker() in crew.py call this before sizing a position.
+
+        Args:
+            requested_hold: The hold period recommended by the risk manager agent.
+
+        Returns:
+            The original hold period, or HoldPeriod.SWING if intraday is blocked.
+        """
+        if not config.allow_intraday and requested_hold == HoldPeriod.INTRADAY:
+            print('⚠️  Intraday disabled (PDT protection) — upgrading to swing trade')
+            return HoldPeriod.SWING
+        return requested_hold
+
     def get_max_hold_days(self, hold: HoldPeriod) -> int:
         """
         Return the maximum calendar days a position in this tier may be held.

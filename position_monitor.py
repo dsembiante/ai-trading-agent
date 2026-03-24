@@ -114,9 +114,18 @@ class PositionMonitor:
         returns True. Intraday positions must never be held overnight — the
         wider gap risk is outside the risk budget defined for this hold tier.
 
+        Guard: if config.allow_intraday is False, no intraday positions should
+        exist (get_hold_period_safe() upgrades them all to swing at entry).
+        The early return here is a safety net for that case.
+
         Failures are logged individually; remaining intraday positions continue
         to be processed so a single bad close does not leave others open.
         """
+        # No intraday positions can exist when PDT protection is active
+        if not config.allow_intraday:
+            print('⚠️  Intraday disabled — no intraday positions to close')
+            return
+
         open_trades = self.db.get_open_trades()
 
         # Filter to intraday tier only — swing and position trades are unaffected

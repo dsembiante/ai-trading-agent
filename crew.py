@@ -186,7 +186,9 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
             # ── Position Sizing & Execution ───────────────────────────────────
             if decision.execute and decision.trade_type:
                 # Resolve hold period — default to SWING if the agent omitted it
-                hold = HoldPeriod(decision.hold_period) if decision.hold_period else HoldPeriod.SWING
+                requested_hold = HoldPeriod(decision.hold_period) if decision.hold_period else HoldPeriod.SWING
+                hold = sizer.get_hold_period_safe(requested_hold)
+                decision.hold_period = hold.value  # Reflect any PDT upgrade in the trade record
 
                 # Calculate dollar size, share count, stop-loss, and take-profit
                 sizing = sizer.calculate(
