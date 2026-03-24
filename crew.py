@@ -193,6 +193,14 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
                 raw = raw.strip()
                 decision = TradeDecision(**json.loads(raw))
 
+            # ── Decision Post-Processing ──────────────────────────────────────
+            # If the agent omitted entry_price (returns null for market orders),
+            # fall back to the current market price so the whole-share calculation
+            # in trade_executor always has a price to work with. Alpaca rejects
+            # bracket orders with fractional qty, so a price is always required.
+            if decision.execute and not decision.entry_price:
+                decision.entry_price = market_data.current_price
+
             # ── Position Sizing & Execution ───────────────────────────────────
             if decision.execute and decision.trade_type:
                 # Resolve hold period — default to SWING if the agent omitted it

@@ -192,6 +192,30 @@ class Database:
             }
         return result
 
+    def get_performance_metrics(self) -> dict:
+        """
+        Return overall aggregate performance stats across all closed trades.
+        Called by report_generator.py when building any report section that
+        needs portfolio-level summary figures.
+
+        Returns:
+            Dict with total_trades, win_rate, total_pnl, avg_pnl.
+            All values default to 0 when no closed trades exist.
+        """
+        cur = self.conn.execute(
+            "SELECT COUNT(*), SUM(pnl), AVG(pnl), "
+            "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) "
+            "FROM trades WHERE status='closed'"
+        )
+        row = cur.fetchone()
+        total = row[0] or 0
+        return {
+            'total_trades': total,
+            'total_pnl':    row[1] or 0,
+            'avg_pnl':      row[2] or 0,
+            'win_rate':     (row[3] / total) if total > 0 else 0,
+        }
+
     def get_daily_performance(self) -> list:
         """
         Return all daily performance snapshots ordered by date descending.
