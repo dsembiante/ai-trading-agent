@@ -126,8 +126,21 @@ class Config(BaseModel):
         'AMZN', 'TSLA', 'NVDA', 'JPM', 'MS',
         'BAC', 'GS', 'AMD', 'SPY', 'QQQ',
         'AAPL', 'V', 'IWM', 'GOOGL',
-        'UBER', 'PFE', 'WMT', 'XOM'                   # ETFs / market proxies
+        'UBER', 'PFE', 'WMT', 'XOM',          # Previous additions
+        'NEE', 'MCD', 'AWK', 'KO'             # Defensive bear market protection
     ]
+    
+    # watchlist: list = [
+    #     'JNJ', 'PG', 'KO', 'MCD', 'NEE',
+    #     'ED', 'SO', 'WEC', 'DUK', 'AWK'                  # ETFs / market proxies
+    # ]
+
+    #    watchlist: list = [
+    #     'AMZN', 'TSLA', 'NVDA', 'JPM', 'MS',
+    #     'BAC', 'GS', 'AMD', 'SPY', 'QQQ',
+    #     'AAPL', 'V', 'IWM', 'GOOGL',
+    #     'UBER', 'PFE', 'WMT', 'XOM'                   # ETFs / market proxies
+    # ]
 
     # ── File Paths ────────────────────────────────────────────────────────────
     # Relative to the project root; directories are created at startup if missing
