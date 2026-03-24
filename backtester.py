@@ -137,8 +137,8 @@ class Backtester:
                     position = {
                         'entry_price': price,
                         'entry_date':  date,
-                        'stop_loss':   price * 0.95,   # -5% hard stop
-                        'take_profit': price * 1.10,   # +10% target (2:1 R/R)
+                        'stop_loss':   price * 0.96,   # -4% hard stop
+                        'take_profit': price * 1.15,   # +15% target (3.75:1 R/R)
                     }
 
             else:
@@ -372,4 +372,4 @@ class Backtester:
 # Run directly with: python backtester.py
 if __name__ == '__main__':
     backtester = Backtester()
-    backtester.run(days=730)
+    backtester.run(days=1095)

@@ -110,8 +110,8 @@ class Config(BaseModel):
     intraday_max_days: int = 1
 
     # Swing — short-term momentum; wider stops to absorb normal daily volatility
-    swing_stop_loss_pct: float = 0.05
-    swing_take_profit_pct: float = 0.10
+    swing_stop_loss_pct: float = 0.04
+    swing_take_profit_pct: float = 0.15
     swing_max_days: int = 5
 
     # Position — trend-following; widest stops to stay in strong moves
@@ -123,11 +123,11 @@ class Config(BaseModel):
     # Symbols scanned on every agent cycle. Mix of mega-cap tech, financials,
     # and broad market ETFs for diversified signal generation.
     watchlist: list = [
-        'AMZN', 'NVDA', 'JPM', 'MS', 'BAC',
-        'GS', 'SPY', 'QQQ', 'AAPL', 'V',
-        'IWM', 'GOOGL', 'UBER', 'PFE', 'WMT',
-        'XOM', 'NEE', 'MCD', 'AWK', 'KO'    # Defensive stocks
-]
+        'AMZN', 'JPM', 'MS', 'BAC', 'GS',
+        'SPY', 'QQQ', 'AAPL', 'V', 'IWM',
+        'WMT', 'XOM', 'NEE', 'MCD', 'AWK',
+        'GOOGL', 'KO'                          # Defensive stocks
+    ]
     
     # watchlist: list = [
     #     'JNJ', 'PG', 'KO', 'MCD', 'NEE',
