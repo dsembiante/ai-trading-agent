@@ -93,6 +93,13 @@ class Database:
                     api_failures                TEXT
                 )
             ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS circuit_breaker_state (
+                    id          INTEGER PRIMARY KEY DEFAULT 1,
+                    peak_value  REAL,
+                    updated_at  TEXT
+                )
+            ''')
         self.conn.commit()
 
     # ── Write Operations ──────────────────────────────────────────────────────
@@ -196,6 +203,29 @@ class Database:
             'avg_pnl':      row[2] or 0,
             'win_rate':     (row[3] / total) if total > 0 else 0,
         }
+
+    def get_circuit_breaker_peak(self):
+        """
+        Return the stored portfolio peak value, or None if not yet set.
+        Called by CircuitBreaker on startup to restore the high-water mark.
+        """
+        with self.conn.cursor() as cur:
+            cur.execute('SELECT peak_value FROM circuit_breaker_state WHERE id = 1')
+            row = cur.fetchone()
+        return row[0] if row else None
+
+    def set_circuit_breaker_peak(self, peak_value: float):
+        """
+        Upsert the portfolio peak value so it survives service restarts/redeploys.
+        Called by CircuitBreaker whenever a new high-water mark is recorded.
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO circuit_breaker_state (id, peak_value, updated_at) VALUES (1, %s, %s) '
+                'ON CONFLICT (id) DO UPDATE SET peak_value = EXCLUDED.peak_value, updated_at = EXCLUDED.updated_at',
+                (peak_value, datetime.now().isoformat())
+            )
+        self.conn.commit()
 
     def get_daily_performance(self) -> list:
         """

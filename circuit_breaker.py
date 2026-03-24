@@ -6,13 +6,14 @@ triggers and check() returns False, which signals the scheduler and crew to
 halt all new trade entries immediately. No positions are auto-liquidated —
 that requires a manual decision after review.
 
-Peak portfolio value is persisted to disk so the breaker survives process
-restarts and continues tracking the high-water mark across sessions.
+Peak portfolio value is persisted to PostgreSQL so the breaker survives
+process restarts and Railway redeploys.
 
 Design note:
     This is intentionally simple and has no reset mechanism in code.
-    Re-enabling trading after a trigger requires a manual deletion of
-    data/peak_value.json and a deliberate restart — by design.
+    Re-enabling trading after a trigger requires deleting the row from the
+    circuit_breaker_state table and restarting the service — by design.
+    SQL: DELETE FROM circuit_breaker_state WHERE id = 1;
 
 Usage:
     from circuit_breaker import CircuitBreaker
@@ -23,8 +24,6 @@ Usage:
 
 from config import config
 from logger import log_error
-import json
-from datetime import datetime
 
 
 class CircuitBreaker:
@@ -34,34 +33,26 @@ class CircuitBreaker:
     """
 
     def __init__(self):
-        # Path to the persisted high-water mark — shared across restarts
-        self.peak_value_file = 'data/peak_value.json'
+        from database import Database
+        self._db = Database()
         self._load_peak()
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
     def _load_peak(self):
         """
-        Load the previously recorded peak portfolio value from disk.
+        Load the previously recorded peak portfolio value from PostgreSQL.
         On first run (or after a manual reset), peak_value is set to None
         so check() initialises it from the first observed portfolio value.
         """
-        try:
-            with open(self.peak_value_file) as f:
-                self.peak_value = json.load(f)['peak']
-        except:
-            # File absent or corrupt — start fresh; not an error condition
-            self.peak_value = None
+        self.peak_value = self._db.get_circuit_breaker_peak()
 
     def _save_peak(self):
         """
-        Persist the updated high-water mark so it survives process restarts.
-        Creates the data/ directory if it was deleted or not yet present.
+        Persist the updated high-water mark to PostgreSQL so it survives
+        service restarts and Railway redeploys.
         """
-        import os
-        os.makedirs('data', exist_ok=True)
-        with open(self.peak_value_file, 'w') as f:
-            json.dump({'peak': self.peak_value}, f)
+        self._db.set_circuit_breaker_peak(self.peak_value)
 
     # ── Core Check ────────────────────────────────────────────────────────────
 
@@ -121,4 +112,4 @@ class CircuitBreaker:
         log_error('circuit_breaker', 'ALL', msg)
 
         # Direct stdout alert — visible in Railway logs and local terminal
-        print(f'🚨 {msg}')
+        print(f'CIRCUIT BREAKER: {msg}')
