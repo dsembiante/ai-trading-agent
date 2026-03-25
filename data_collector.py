@@ -87,8 +87,6 @@ class DataCollector:
             log_error('alpaca', ticker, str(e))
 
         # ── 2. yfinance — Technicals & Fundamentals ───────────────────────────
-        # Pull 1 year of daily history for indicator calculation.
-        # Fundamentals come from yf.Ticker.info — no separate API key required.
         try:
             yf_ticker = yf.Ticker(ticker)
 
