@@ -23,9 +23,7 @@ Or from another module:
     results = Backtester().run(days=180)
 """
 
-from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
+import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 from datetime import datetime, timedelta
@@ -42,10 +40,7 @@ class Backtester:
     """
 
     def __init__(self):
-        # Historical data client — read-only, no trading permissions needed
-        self.client = StockHistoricalDataClient(
-            config.alpaca_api_key, config.alpaca_secret_key
-        )
+        pass
 
     # ── Data Fetching ─────────────────────────────────────────────────────────
 
@@ -69,18 +64,21 @@ class Backtester:
             Empty DataFrame on API error.
         """
         try:
-            bars = self.client.get_stock_bars(StockBarsRequest(
-                symbol_or_symbols=ticker,
-                timeframe=TimeFrame.Day,
-                start=datetime.now() - timedelta(days=days),
-            ))
-            df = bars.df.reset_index()
+            df = yf.Ticker(ticker).history(period=f'{days}d')
 
-            # Compute indicators in-place using pandas-ta
-            df.ta.rsi(append=True)
-            df.ta.macd(append=True)
-            df['SMA_50']  = df['close'].rolling(50).mean()
-            df['SMA_200'] = df['close'].rolling(200).mean()
+            if df.empty:
+                return pd.DataFrame()
+
+            df = df.reset_index()
+            df.rename(columns={'Date': 'timestamp', 'Close': 'close'}, inplace=True)
+
+            close = df['close']
+            df['RSI_14'] = ta.rsi(close, length=14)
+            macd_df = ta.macd(close)
+            if macd_df is not None:
+                df['MACD_12_26_9'] = macd_df['MACD_12_26_9']
+            df['SMA_50']  = close.rolling(50).mean()
+            df['SMA_200'] = close.rolling(200).mean()
 
             return df
 
