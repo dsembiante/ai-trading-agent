@@ -122,10 +122,9 @@ class Config(BaseModel):
     # Symbols scanned on every agent cycle. Mix of mega-cap tech, financials,
     # and broad market ETFs for diversified signal generation.
     watchlist: list = [
-        'AMZN', 'JPM', 'MS', 'BAC', 'GS',
-        'SPY', 'QQQ', 'AAPL', 'V', 'IWM',
-        'WMT', 'XOM', 'NEE', 'MCD', 'AWK',
-        'GOOGL', 'KO'                          # Defensive stocks
+        'XOM', 'WMT', 'GS', 'V', 'MCD',
+        'SPY', 'KO', 'ED', 'DUK', 'SO',
+        'PEP', 'PG', 'WEC', 'JNJ', 'CL'                  # Defensive stocks
     ]
     
     # watchlist: list = [
