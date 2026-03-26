@@ -24,11 +24,13 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (
     MarketOrderRequest, LimitOrderRequest,
     StopOrderRequest, TakeProfitRequest, StopLossRequest,
+    GetOrdersRequest,
 )
-from alpaca.trading.enums import OrderSide, TimeInForce, OrderType
+from alpaca.trading.enums import OrderSide, TimeInForce, OrderType, QueryOrderStatus
 from config import config
 from logger import log_error
 from models import TradeDecision
+from typing import Optional
 import time
 
 
@@ -209,6 +211,40 @@ class TradeExecutor:
             print(f'✅ Position closed: {ticker}')
         except Exception as e:
             log_error('close_position', ticker, str(e))
+
+    def get_filled_exit_price(self, ticker: str) -> Optional[float]:
+        """
+        Query Alpaca's order history for the most recent filled order on a
+        ticker and return its average fill price.
+
+        Used by position_monitor.py when a position disappears from Alpaca
+        (closed by a bracket stop-loss or take-profit) to record the real
+        exit price rather than a live market quote.
+
+        Returns:
+            The filled_avg_price of the most recent filled order, or None
+            if no filled orders are found or the API call fails.
+        """
+        try:
+            orders = self.client.get_orders(filter=GetOrdersRequest(
+                status=QueryOrderStatus.CLOSED,
+                symbols=[ticker],
+                limit=10,
+            ))
+            # Keep only orders that were actually filled (have a fill price)
+            filled = [o for o in orders if o.filled_avg_price is not None]
+            if not filled:
+                print(f'[get_filled_exit_price] No filled orders found for {ticker}')
+                return None
+            # Sort by fill time descending — most recent fill is the exit
+            filled.sort(key=lambda o: o.filled_at or '', reverse=True)
+            price = float(filled[0].filled_avg_price)
+            print(f'[get_filled_exit_price] {ticker} — found fill price: {price} (order {filled[0].id})')
+            return price
+        except Exception as e:
+            log_error('get_filled_exit_price', ticker, str(e))
+            print(f'[get_filled_exit_price] ERROR fetching fill price for {ticker}: {e}')
+            return None
 
     def close_all_positions(self):
         """

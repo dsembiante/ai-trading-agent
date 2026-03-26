@@ -203,6 +203,12 @@ def create_portfolio_task(agent, ticker: str, risk_task: Task, open_positions: l
     return Task(
         description=f'''
             You are the Portfolio Manager reviewing the trade decision for {ticker}.
+
+            IMPORTANT: If the risk manager set execute=false, you MUST keep execute=false.
+            Never change execute from false to true. Your only job is to potentially change
+            execute from true to false if position limits are violated. You cannot approve
+            a trade that the risk manager already rejected.
+
             Current open positions: {len(open_positions)} of {config.max_positions} maximum.
             Open tickers: {[p['ticker'] for p in open_positions]}
 

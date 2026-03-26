@@ -122,9 +122,19 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
     portfolio_agent = create_portfolio_manager()
 
     # ── Per-Ticker Loop ───────────────────────────────────────────────────────
+    # Build a set of tickers that already have an open position in the DB so
+    # we can skip them without running a full crew analysis. Fetched once here
+    # rather than inside the loop to avoid a DB call per ticker.
+    open_trade_tickers = {t['ticker'] for t in db.get_open_trades()}
+
     for ticker in config.watchlist:
         try:
             print(f'\n📊 Analyzing {ticker}...')
+
+            # ── Duplicate Position Guard ──────────────────────────────────────
+            if ticker in open_trade_tickers:
+                print(f'⏭️  {ticker} already has an open position — skipping')
+                continue
 
             # ── Data Collection ───────────────────────────────────────────────
             # collect() returns partial data on source failure — DataSourceStatus
@@ -202,6 +212,37 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
                 decision = TradeDecision(**json.loads(raw))
 
             # ── Decision Post-Processing ──────────────────────────────────────
+            # Safety check: if the agent incorrectly set execute=True while
+            # leaving required fields as None, block the trade and log a warning.
+            # This check runs before defaults are applied so genuinely missing
+            # fields are caught rather than silently masked.
+            if decision.execute and any(
+                f is None for f in [
+                    decision.trade_type, decision.order_type,
+                    decision.hold_period, decision.max_hold_days,
+                ]
+            ):
+                missing = [
+                    name for name, val in {
+                        'trade_type':    decision.trade_type,
+                        'order_type':    decision.order_type,
+                        'hold_period':   decision.hold_period,
+                        'max_hold_days': decision.max_hold_days,
+                    }.items() if val is None
+                ]
+                print(f'⚠️  Trade blocked: missing required fields despite execute=true — {missing}')
+                log_error('crew', ticker, f'Trade blocked: missing required fields despite execute=true: {missing}')
+                decision.execute = False
+
+            # Fill safe defaults for None fields so downstream code never
+            # receives None for these fields regardless of execute flag.
+            if decision.order_type is None:
+                decision.order_type = 'market'
+            if decision.hold_period is None:
+                decision.hold_period = 'swing'
+            if decision.max_hold_days is None:
+                decision.max_hold_days = 5
+
             # If the agent omitted entry_price (returns null for market orders),
             # fall back to the current market price so the whole-share calculation
             # in trade_executor always has a price to work with. Alpaca rejects

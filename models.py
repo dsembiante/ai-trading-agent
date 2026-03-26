@@ -141,9 +141,9 @@ class TradeDecision(BaseModel):
     ticker: str
     execute: bool  # Master switch — False means the cycle produced no actionable signal
 
-    trade_type: Optional[TradeType] = None           # None when execute=False
-    order_type: OrderType = OrderType.LIMIT           # Limit orders by default to control slippage
-    hold_period: HoldPeriod = HoldPeriod.SWING        # Default to swing if unspecified
+    trade_type: Optional[TradeType] = None               # None when execute=False
+    order_type: Optional[OrderType] = OrderType.MARKET   # None-safe; defaults to market
+    hold_period: Optional[HoldPeriod] = HoldPeriod.SWING # None-safe; defaults to swing
     confidence: float = Field(..., ge=0.0, le=1.0)
 
     # Position sizing — populated by position_sizer.py, None until calculated
@@ -155,7 +155,7 @@ class TradeDecision(BaseModel):
     take_profit_price: Optional[float] = None
 
     # Maximum calendar days before position_monitor.py forces an exit regardless of P&L
-    max_hold_days: int = 5
+    max_hold_days: Optional[int] = 5
 
     # Reasoning strings from each agent — preserved for audit trail and dashboard display
     bull_reasoning: str = ''

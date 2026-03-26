@@ -128,7 +128,7 @@ class Database:
             cur.execute(sql, list(trade.values()))
         self.conn.commit()
 
-    def update_trade_status(self, trade_id, status, exit_reason=None, exit_price=None):
+    def update_trade_status(self, trade_id, status, exit_reason=None, exit_price=None, pnl=None, pnl_pct=None):
         """
         Record the outcome of a closed trade.
 
@@ -137,9 +137,10 @@ class Database:
         """
         with self.conn.cursor() as cur:
             cur.execute(
-                'UPDATE trades SET status=%s, exit_reason=%s, exit_price=%s, exit_time=%s '
-                'WHERE trade_id=%s',
-                (status, exit_reason, exit_price, datetime.now().isoformat(), trade_id)
+                'UPDATE trades SET status=%s, exit_reason=%s, exit_price=%s, '
+                'pnl=%s, pnl_pct=%s, exit_time=%s WHERE trade_id=%s',
+                (status, exit_reason, exit_price, pnl, pnl_pct,
+                 datetime.now().isoformat(), trade_id)
             )
         self.conn.commit()
 
