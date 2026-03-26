@@ -68,6 +68,7 @@ def create_bull_task(agent, ticker: str, market_data_summary: str) -> Task:
             - swing:     solid multi-day technical setup, moderate conviction
             - position:  strong fundamental thesis, high conviction, longer timeframe
 
+            Volume guidance: volume_vs_avg above 1.20 is a confirming signal for your bull thesis. volume_vs_avg below 0.80 is a warning — low participation weakens the setup.
             Be concise — keep reasoning under 3 sentences, key_factors to 2-3 items max.
         ''',
         expected_output='JSON object with ticker, recommendation, confidence, reasoning, key_factors, recommended_hold_period, hold_period_reasoning',
@@ -164,6 +165,7 @@ def create_risk_manager_task(agent, ticker: str, bull_task: Task, bear_task: Tas
             - hold_period_reasoning: why you chose this hold period
 
             IMPORTANT: Only set execute=true if confidence >= {config.confidence_threshold}.
+            IMPORTANT: If days_to_earnings is less than 7, do NOT open a new position — set execute=false. Earnings within one week create unpredictable gap risk.
             When in doubt, do nothing — execute=false is always valid.
             Be concise — keep all reasoning fields under 2 sentences each.
         ''',

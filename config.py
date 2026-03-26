@@ -94,7 +94,7 @@ class Config(BaseModel):
     allow_intraday: bool = False
 
     # ── Risk Management ───────────────────────────────────────────────────────
-    max_position_pct: float = 0.03      # Max 3% of portfolio per single position
+    max_position_pct: float = 0.04      # Max 4% of portfolio per single position
     circuit_breaker_pct: float = 0.10   # Hard stop: halt all trading at 10% drawdown
     confidence_threshold: float = 0.75  # Minimum agent confidence score to enter a trade
     max_positions: int = 15             # Maximum concurrent open positions
@@ -122,9 +122,9 @@ class Config(BaseModel):
     # Symbols scanned on every agent cycle. Mix of mega-cap tech, financials,
     # and broad market ETFs for diversified signal generation.
     watchlist: list = [
-        'XOM', 'WMT', 'GS', 'V', 'MCD',
-        'SPY', 'KO', 'ED', 'DUK', 'SO',
-        'PEP', 'PG', 'WEC', 'JNJ', 'CL'                  # Defensive stocks
+        'XOM', 'WMT', 'ED', 'DUK', 'WEC',
+        'V', 'PG', 'SO', 'PEP', 'MCD',
+        'SPY', 'KO'                  # Defensive stocks
     ]
     
     # watchlist: list = [

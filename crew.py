@@ -153,6 +153,8 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
                 EPS: {f'${market_data.eps:.2f}' if market_data.eps else 'N/A'}
                 Revenue Growth: {f'{market_data.revenue_growth*100:.1f}%' if market_data.revenue_growth else 'N/A'}
                 Next Earnings: {market_data.next_earnings_date or 'N/A'}
+                Days to Earnings: {market_data.days_to_earnings if market_data.days_to_earnings is not None else 'N/A'}
+                Volume vs 20-day Avg: {f'{market_data.volume_vs_avg:.2f}x' if market_data.volume_vs_avg else 'N/A'}
                 Analyst Recommendation: {market_data.analyst_recommendation or 'N/A'}
                 Market Regime: {market_regime.upper()}
                 News headlines: {market_data.news_headlines[:5]}
@@ -339,6 +341,8 @@ def run_single_ticker(ticker: str, headline: str, position_multiplier: float = 1
             Volume: {market_data.volume:,}
             RSI: {market_data.rsi if market_data.rsi else 'N/A'}
             MACD: {market_data.macd if market_data.macd else 'N/A'}
+            Days to Earnings: {market_data.days_to_earnings if market_data.days_to_earnings is not None else 'N/A'}
+            Volume vs 20-day Avg: {f'{market_data.volume_vs_avg:.2f}x' if market_data.volume_vs_avg else 'N/A'}
             News Headlines: {market_data.news_headlines[:3]}
             Macro Context: {market_data.macro_context or 'N/A'}
             Position Size: {position_label}

@@ -19,6 +19,7 @@ Usage:
     data = DataCollector().collect('AAPL')
 """
 
+from typing import Optional
 import finnhub
 import yfinance as yf
 import pandas as pd
@@ -67,6 +68,7 @@ class DataCollector:
         price = volume = rsi = macd = ma50 = ma200 = None
         pe_ratio = forward_pe = revenue_growth = eps = None
         next_earnings_date = analyst_recommendation = None
+        days_to_earnings = volume_vs_avg = None
         news_sentiment = None
         headlines = []
         macro_context = None
@@ -94,6 +96,7 @@ class DataCollector:
             hist = yf_ticker.history(period='1y')
             if not hist.empty:
                 close = hist['Close']
+                vol   = hist['Volume']
 
                 rsi_series = ta.rsi(close, length=14)
                 if rsi_series is not None and not rsi_series.empty:
@@ -112,6 +115,11 @@ class DataCollector:
                 ma50 = float(val50) if not pd.isna(val50) else None
                 ma200 = float(val200) if not pd.isna(val200) else None
 
+                # ── Volume vs 20-day average ──────────────────────────────────
+                avg_vol_20 = vol.rolling(20).mean().iloc[-1]
+                if not pd.isna(avg_vol_20) and avg_vol_20 > 0 and volume:
+                    volume_vs_avg = round(volume / avg_vol_20, 2)
+
             # ── Fundamentals ──────────────────────────────────────────────────
             info = yf_ticker.info
             pe_ratio             = info.get('trailingPE', None)
@@ -120,13 +128,14 @@ class DataCollector:
             eps                  = info.get('trailingEps', None)
             analyst_recommendation = info.get('recommendationKey', None)  # 'buy','hold','sell'
 
-            # ── Next earnings date ────────────────────────────────────────────
+            # ── Next earnings date & days to earnings ─────────────────────────
             try:
                 cal = yf_ticker.calendar
                 if isinstance(cal, dict) and 'Earnings Date' in cal:
                     dates = cal['Earnings Date']
                     if dates:
                         next_earnings_date = str(dates[0].date())
+                        days_to_earnings = (dates[0].date() - datetime.now().date()).days
             except Exception:
                 pass  # Earnings date is best-effort
 
@@ -189,12 +198,31 @@ class DataCollector:
             revenue_growth=revenue_growth,
             eps=eps,
             next_earnings_date=next_earnings_date,
+            days_to_earnings=days_to_earnings,
             analyst_recommendation=analyst_recommendation,
+            volume_vs_avg=volume_vs_avg,
             news_sentiment=news_sentiment,
             news_headlines=headlines,
             macro_context=macro_context,
             data_sources_used=status,
         )
+
+    def get_next_earnings_date(self, ticker: str) -> Optional[str]:
+        """
+        Fetch the next earnings date for a ticker using yfinance.
+
+        Returns:
+            ISO date string (e.g. '2026-04-15') or None if unavailable.
+        """
+        try:
+            cal = yf.Ticker(ticker).calendar
+            if isinstance(cal, dict) and 'Earnings Date' in cal:
+                dates = cal['Earnings Date']
+                if dates:
+                    return str(dates[0].date())
+        except Exception:
+            pass
+        return None
 
     def get_market_regime(self) -> str:
         """

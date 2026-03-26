@@ -84,6 +84,12 @@ class MarketData(BaseModel):
     news_sentiment: Optional[float] = None  # Normalised score: -1.0 (bearish) to 1.0 (bullish)
     news_headlines: List[str] = []          # Raw headlines passed to the LLM for context
 
+    # Earnings proximity — days until next earnings report
+    days_to_earnings: Optional[int] = None  # None if earnings date unavailable
+
+    # Volume vs 20-day average — 1.25 means 25% above average
+    volume_vs_avg: Optional[float] = None
+
     # Macro — None when FRED is unreachable
     macro_context: Optional[str] = None    # Free-text summary of relevant macro conditions
 
