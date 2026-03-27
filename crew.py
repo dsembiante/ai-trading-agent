@@ -122,18 +122,20 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
     portfolio_agent = create_portfolio_manager()
 
     # ── Per-Ticker Loop ───────────────────────────────────────────────────────
-    # Build a set of tickers that already have an open position in the DB so
-    # we can skip them without running a full crew analysis. Fetched once here
-    # rather than inside the loop to avoid a DB call per ticker.
-    open_trade_tickers = {t['ticker'] for t in db.get_open_trades()}
+    # Build a set of tickers currently held in Alpaca — the authoritative source.
+    # The DB can lag (e.g. bracket orders closed without a sync cycle), so checking
+    # Alpaca directly prevents duplicate entries when the DB shows open but Alpaca
+    # has already moved on, or vice versa.
+    # open_positions was already fetched above after the monitor ran.
+    alpaca_held_tickers = {p['ticker'] for p in open_positions}
 
     for ticker in config.watchlist:
         try:
             print(f'\n📊 Analyzing {ticker}...')
 
             # ── Duplicate Position Guard ──────────────────────────────────────
-            if ticker in open_trade_tickers:
-                print(f'⏭️  {ticker} already has an open position — skipping')
+            if ticker in alpaca_held_tickers:
+                print(f'⏭️  {ticker} already held in Alpaca — skipping')
                 continue
 
             # ── Data Collection ───────────────────────────────────────────────
