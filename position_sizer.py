@@ -107,7 +107,8 @@ class PositionSizer:
             HoldPeriod.POSITION: config.position_stop_loss_pct,
         }.get(hold, config.swing_stop_loss_pct)  # Default to swing if unrecognised
 
-        if trade_type in ['buy', 'long']:
+        trade_type_val = getattr(trade_type, 'value', trade_type)
+        if trade_type_val in ('buy', 'long'):
             return round(entry * (1 - pct), 2)  # Stop below entry for longs
         return round(entry * (1 + pct), 2)       # Stop above entry for shorts
 
@@ -135,7 +136,8 @@ class PositionSizer:
             HoldPeriod.POSITION: config.position_take_profit_pct,
         }.get(hold, config.swing_take_profit_pct)
 
-        if trade_type in ['buy', 'long']:
+        trade_type_val = getattr(trade_type, 'value', trade_type)
+        if trade_type_val in ('buy', 'long'):
             return round(entry * (1 + pct), 2)  # Target above entry for longs
         return round(entry * (1 - pct), 2)       # Target below entry for shorts
 
