@@ -21,12 +21,13 @@ Deploy on Railway:
     Set the start command to: python scheduler.py
 """
 
-import schedule, time
+import schedule, time, threading
 from datetime import datetime
-from crew import run_trading_cycle
+from crew import run_trading_cycle, run_single_ticker
 from report_generator import generate_daily_report
 from circuit_breaker import CircuitBreaker
 from position_monitor import PositionMonitor
+from news_monitor import NewsMonitor
 from config import config, RunMode
 from logger import log_run
 
@@ -68,6 +69,33 @@ def market_is_open() -> bool:
         return False
 
     return True
+
+
+# ── News Monitor ──────────────────────────────────────────────────────────────
+
+def news_monitor_loop():
+    """
+    Background thread that polls for breaking news during market hours and
+    triggers an immediate single-ticker analysis for each actionable headline.
+
+    Runs continuously as a daemon so it exits automatically when the main
+    process ends. Sleeps 60 seconds between polls to avoid hammering the
+    news API while still reacting to events within a minute of publication.
+    """
+    monitor = NewsMonitor()
+    while True:
+        if market_is_open():
+            try:
+                results = monitor.get_breaking_news()
+                for item in results:
+                    run_single_ticker(
+                        item['ticker'],
+                        item['headline'],
+                        item['position_size_multiplier'],
+                    )
+            except Exception as e:
+                print(f'News monitor error: {e}')
+        time.sleep(60)
 
 
 # ── Cycle Functions ───────────────────────────────────────────────────────────
@@ -159,6 +187,7 @@ elif config.run_mode == RunMode.INTRADAY_30MIN:
 
 if __name__ == '__main__':
     print(f'Trading scheduler started in {config.run_mode} mode')
+    threading.Thread(target=news_monitor_loop, daemon=True).start()
     # Poll every 30 seconds — fine-grained enough for minute-level scheduling
     # without burning CPU. schedule.run_pending() is non-blocking.
     while True:
