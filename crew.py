@@ -134,8 +134,11 @@ def run_trading_cycle(circuit_breaker: CircuitBreaker):
             print(f'\n📊 Analyzing {ticker}...')
 
             # ── Duplicate Position Guard ──────────────────────────────────────
-            if ticker in alpaca_held_tickers:
-                print(f'⏭️  {ticker} already held in Alpaca — skipping')
+            # Two-layer check: Alpaca live positions (authoritative) and the DB
+            # (catches orders that haven't fully settled in Alpaca yet).
+            db_open_tickers = {t['ticker'] for t in db.get_open_trades()}
+            if ticker in alpaca_held_tickers or ticker in db_open_tickers:
+                print(f'⏭️  {ticker} already held in Alpaca or DB — skipping')
                 continue
 
             # ── Data Collection ───────────────────────────────────────────────
