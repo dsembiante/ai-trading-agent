@@ -166,6 +166,16 @@ def create_risk_manager_task(agent, ticker: str, bull_task: Task, bear_task: Tas
 
             IMPORTANT: Only set execute=true if confidence >= {config.confidence_threshold}.
             IMPORTANT: If days_to_earnings is less than 7, do NOT open a new position — set execute=false. Earnings within one week create unpredictable gap risk.
+
+            DATA QUALITY GUIDANCE — evaluate these conditions before setting your confidence score:
+
+            If alpaca is False in data_sources_available: this ticker should have been skipped upstream — set execute=false.
+            If yfinance is False in data_sources_available: you are missing all technical indicators and fundamentals. Unless price action and news provide extremely compelling signals, set confidence below 0.78 or execute=false.
+            If finnhub is False in data_sources_available: this is expected on the current Finnhub plan — do NOT penalize confidence for missing Finnhub data. Proceed normally with available signals.
+            If finnhub is True AND news_sentiment is negative (below -0.3): treat this as a meaningful bearish signal and weight it in your confidence score.
+            If fred is False in data_sources_available: you are missing macro context. Apply extra caution on interest-rate-sensitive stocks such as utilities, REITs, and consumer staples.
+            If 2 or more sources other than finnhub show False in data_sources_available: set execute=false — insufficient data to make a reliable decision.
+
             When in doubt, do nothing — execute=false is always valid.
             Be concise — keep all reasoning fields under 2 sentences each.
         ''',
